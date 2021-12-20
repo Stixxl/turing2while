@@ -37,11 +37,18 @@ fun turing_to_while :: "config \<Rightarrow> tprog0 \<Rightarrow> name \<Rightar
                                                                                                    encode_tape_instr a1;;(nth_name s1)::=A (N 0);;(as_string n)::=A (N 1)
                                                                                                    ELSE encode_tape_instr a0;;(nth_name s0)::=A (N 0);;(as_string n)::=A (N 1)) "
 
+abbreviation eval:: "config \<Rightarrow> tprog0 \<Rightarrow> (char list \<Rightarrow> nat)" where
+"eval c p \<equiv> big_step_t ((turing_to_while c p (next (default::name))), (\<lambda>s. if s=''__'' then 0::nat else 1)) 0"
+
+
+
+
 lemma conversion_correct:
   (* assumes tm_wf: "tm_wf p" *)
   assumes tm_accepts: "is_final(steps c (p,1) n)"
-  shows "turing_to_while c p (next (default::name))"
-  
+  and "big_step_t ((turing_to_while c p (next (default::name))), (\<lambda>s. if s=''__'' then 0::nat else 1)) k s" 
+  shows "encode_tape (steps c (p,1) n) = (s ''_'',s ''x'', s ''y'')"
+  sorry
 
 value "aval(RightShift (N 2)) <> "
 value "as_string(next (next default::name))"

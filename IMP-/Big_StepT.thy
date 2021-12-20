@@ -47,11 +47,10 @@ schematic_goal ex: "(''x'' ::= A (N 5);; ''y'' ::= A (V ''x''), s) \<Rightarrow>
   apply simp
   done
 
-
 values "{(t, x). big_step_t (SKIP, \<lambda>_. 0) x t}"
 
 values "{map t [''x''] |t x. (SKIP, <''x'' := 42>) \<Rightarrow>\<^bsup> x \<^esup> t}"
-
+                                            
 values "{map t [''x''] |t x. (''x'' ::=A (N 2), <''x'' := 42>) \<Rightarrow>\<^bsup> x \<^esup> t}"
 
 values "{(map t [''x''],x) |t x. (WHILE ''x''\<noteq>0 DO ''x''::= Sub (V ''x'') (N 1),<''x'':=5>) \<Rightarrow>\<^bsup> x \<^esup> t }"
@@ -170,6 +169,5 @@ proof -
   moreover from b bigstepT_the_cost have "(THE n. \<exists>a. (IF b \<noteq>0 THEN c1 ELSE c2, s) \<Rightarrow>\<^bsup> n \<^esup> a) = p+1" by simp
   ultimately show ?thesis by simp
 qed
-    
 
 end

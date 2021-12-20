@@ -11,10 +11,11 @@ fun encode_tape_acc :: "config \<Rightarrow> enc_tape \<Rightarrow> enc_tape" wh
 "encode_tape_acc (s,[],[]) (z,x,y) = (s,x,y)" |
 "encode_tape_acc (s,[],r#rs) (z,x,y) = (if r = Bk then (encode_tape_acc (s,[],rs) (z,x,LeftShift_nat y)) 
                                                   else (encode_tape_acc (s,[],rs) (z,x,(LeftShift_nat y) + 1)))" |
-"encode_tape_acc (s,l#ls,r) (z,x,y) = (if l = Bk then (encode_tape_acc (s,ls,r) (z,LeftShift_nat x,y)) else (encode_tape_acc (s,ls,r) (z, (LeftShift_nat x) + 1,y)))"
+"encode_tape_acc (s,l#ls,r) (z,x,y) = (if l = Bk then (encode_tape_acc (s,ls,r) (z,LeftShift_nat x,y)) 
+                                                  else (encode_tape_acc (s,ls,r) (z, (LeftShift_nat x) + 1,y)))"
 
 fun encode_tape :: "config \<Rightarrow> enc_tape" where
-"encode_tape (s,ls,rs) = encode_tape_acc (s,ls, rev rs) (0,0,0)"
+"encode_tape (s,ls,rs) = encode_tape_acc (s,rev ls, rev rs) (0,0,0)"
 
 definition LeftShift:: "atomExp \<Rightarrow> aexp" ("_\<lless>") where
 "LeftShift a = Plus a a"
@@ -29,15 +30,18 @@ abbreviation nth_name:: "nat \<Rightarrow> string" where
 "nth_name n \<equiv> (as_string ((next^^n) (default::name)))"
 
 
-fun turing_to_while :: "config \<Rightarrow> tprog0 \<Rightarrow> name \<Rightarrow> com" where
+fun turing_to_while :: "config \<Rightarrow> tprog0 \<Rightarrow> name \<Rightarrow> com" where (* state has to evaluate all variables to 1 except (next (default::name)) which has to be 0 at the beginning *)
 "turing_to_while c [] _ = (let (z,x,y) = encode_tape c in (''z''::=A (N z);;''x''::=A (N x);;''y''::=A (N y)));;WHILE (as_string (default::name))\<noteq>0 DO SKIP" |
-"turing_to_while c ((a0,s0)#(a1,s1)#is) n = turing_to_while c is (next n);;IF (as_string n)\<noteq>0 THEN 
-                                                              (''t''::=(V ''x''\<doteq>1);;IF ''t''\<noteq>0 THEN 
-                                                                      encode_tape_instr a1;;(nth_name s1)::=A (N 1);;(as_string n)::=A (N 0)
-                                                                 ELSE encode_tape_instr a0;;(nth_name s0)::=A (N 1);;(as_string n)::=A (N 0)) 
-                                                                           ELSE SKIP"
+"turing_to_while c ((a0,s0)#(a1,s1)#is) n = turing_to_while c is (next n);;IF (as_string n)\<noteq>0 THEN SKIP
+                                                                                              ELSE (''t''::=(V ''x''\<doteq>1);;IF ''t''\<noteq>0 THEN 
+                                                                                                   encode_tape_instr a1;;(nth_name s1)::=A (N 0);;(as_string n)::=A (N 1)
+                                                                                                   ELSE encode_tape_instr a0;;(nth_name s0)::=A (N 0);;(as_string n)::=A (N 1)) "
 
-lemma conversion_correct: "True"
+lemma conversion_correct:
+  (* assumes tm_wf: "tm_wf p" *)
+  assumes tm_accepts: "is_final(steps c (p,1) n)"
+  shows "turing_to_while c p (next (default::name))"
+  
 
 value "aval(RightShift (N 2)) <> "
 value "as_string(next (next default::name))"
