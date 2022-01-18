@@ -27,18 +27,25 @@ fun decode_tape :: "enc_tape \<Rightarrow> config" where
 "decode_tape (z,n,m) = (z, nat_to_tape n, nat_to_tape m)"
 
 value "decode_tape(encode_tape (42, [Oc, Bk, Oc, Oc], [Oc, Bk, Oc, Oc]))"
+value ""
 
 lemma encode_decode_same_state_l: "\<lbrakk>encode_tape(decode_tape(z,x,y)) = (z',x',y')\<rbrakk> \<Longrightarrow> z = z'"
   by simp
-(* 1(0|1)* *)
+
 lemma nat_to_tape_inverse: "\<exists>n. nat_to_tape(tape_to_nat xs) = (replicate n Bk) @ xs"
 proof (induct xs)
   case Nil
-  then show ?case by auto
+  then show ?case by simp
 next
   case (Cons a xs)
-  then show ?case sorry
-qed
+  then show ?case
+  proof (cases a)
+    case Bk
+    then show ?thesis using Cons try
+  next
+    case Oc
+    then show ?thesis sorry
+  qed
   
 lemma tape_to_nat_inverse: "tape_to_nat(nat_to_tape n) = n"
   sorry
