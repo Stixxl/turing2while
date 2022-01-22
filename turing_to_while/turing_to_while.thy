@@ -27,19 +27,32 @@ fun decode_tape :: "enc_tape \<Rightarrow> config" where
 "decode_tape (z,n,m) = (z, nat_to_tape n, nat_to_tape m)"
 
 value "decode_tape(encode_tape (42, [Oc, Bk, Oc, Oc], [Oc, Bk, Oc, Oc]))"
+value "encode_tape(decode_tape(42, 13, 13))"
+value "tape_to_nat([Bk,Oc,Oc])"
 
-lemma encode_decode_same_state_l: "\<lbrakk>encode_tape(decode_tape(z,x,y)) = (z',x',y')\<rbrakk> \<Longrightarrow> z = z'"
-  by simp
-(* 1(0|1)* *)
+lemma test: "(2 * n) mod 2 = 0" 
+  apply(induct n rule: nat.induct)
+  apply(auto)
+  
 lemma nat_to_tape_inverse: "\<exists>n. nat_to_tape(tape_to_nat xs) = (replicate n Bk) @ xs"
-proof (induct xs)
-  case Nil
+proof (induction xs rule: tape_to_nat.induct)
+  case 1
   then show ?case by auto
 next
-  case (Cons a xs)
-  then show ?case sorry
+  case (2 x xs)
+  then show ?case
+  proof (cases x)
+    case Bk
+    from "2.IH" have "\<exists>n. nat_to_tape (tape_to_nat xs) = Bk \<up> n @ xs"  by auto
+    then have "\<exists>n.  Bk # nat_to_tape (tape_to_nat xs) = Bk \<up> n @ (Bk#xs)" by (simp add: replicate_app_Cons_same)
+    then have "\<exists>n. Bk # nat_to_tape (tape_to_nat xs) = Bk \<up> n @ nat_to_tape (2 * (tape_to_nat xs))" try
+  next
+    case Oc
+    then show ?thesis sorry
+  qed
 qed
-  
+
+
 lemma tape_to_nat_inverse: "tape_to_nat(nat_to_tape n) = n"
   sorry
 
@@ -68,6 +81,7 @@ fun turing_to_while :: "config \<Rightarrow> tprog0 \<Rightarrow> name \<Rightar
                             encode_tape_instr a1;;(nth_name s1)::=A (N 0);;(as_string n)::=A (N 1)
                           ELSE encode_tape_instr a0;;(nth_name s0)::=A (N 0);;(as_string n)::=A (N 1)) "
 lemma empty_not_wf: "\<not>tm_wf ([],1)" by simp
+
 
 lemma conversion_correct:
   assumes tm_wf: "tm_wf (p,1)"
