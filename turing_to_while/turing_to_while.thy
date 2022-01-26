@@ -7,8 +7,6 @@ type_synonym enc_tape = "nat \<times> nat \<times> nat"
 abbreviation LeftShift_nat:: "nat \<Rightarrow> nat" where
 " LeftShift_nat a \<equiv> a + a"
 
-
-(* TODO TEST *)
 fun tape_to_nat :: "cell list \<Rightarrow> nat" where
 "tape_to_nat [] = 0" |
 "tape_to_nat (x#xs) = (if x = Bk then LeftShift_nat (tape_to_nat xs)
@@ -26,15 +24,29 @@ fun nat_to_tape :: "nat \<Rightarrow> cell list" where
 fun decode_tape :: "enc_tape \<Rightarrow> config" where
 "decode_tape (z,n,m) = (z, nat_to_tape n, nat_to_tape m)"
 
-value "decode_tape(encode_tape (42, [Oc, Bk, Oc, Oc], [Oc, Bk, Oc, Oc]))"
-value "encode_tape(decode_tape(42, 13, 13))"
-value "tape_to_nat([Bk,Oc,Oc])"
+fun is_cell_list_eq :: "cell list \<Rightarrow> cell list \<Rightarrow> bool" where (*proof correctness; how? probably via proofing equality on fetch command*)
+"is_cell_list_eq xs ys = (dropWhile (\<lambda>x. x = Bk)(rev xs)  = dropWhile (\<lambda>y. y = Bk) (rev ys))"
 
-lemma test: "(2 * n) mod 2 = 0" 
-  apply(induct n rule: nat.induct)
-  apply(auto)
-  
-lemma nat_to_tape_inverse: "\<exists>n. nat_to_tape(tape_to_nat xs) = (replicate n Bk) @ xs"
+
+lemma nat_to_tape_bk: "\<lbrakk>n > 0\<rbrakk> \<Longrightarrow> Bk # (nat_to_tape n) = nat_to_tape (2*n)"
+  apply(induct n)
+   apply(auto)
+  done
+lemma is_cell_list_eq_bk: "is_cell_list_eq (xs @ [Bk]) xs"
+   apply(simp)
+  done
+
+lemma tape_to_nat_inverse: "tape_to_nat(nat_to_tape n) = n"
+proof(induct n)
+  case 0
+  then show ?case by simp
+next
+  case (Suc n)
+  then show ?case sorry
+qed
+
+
+lemma nat_to_tape_inverse: "is_cell_list_eq (nat_to_tape(tape_to_nat xs)) xs"
 proof (induction xs rule: tape_to_nat.induct)
   case 1
   then show ?case by auto
@@ -43,9 +55,8 @@ next
   then show ?case
   proof (cases x)
     case Bk
-    from "2.IH" have "\<exists>n. nat_to_tape (tape_to_nat xs) = Bk \<up> n @ xs"  by auto
-    then have "\<exists>n.  Bk # nat_to_tape (tape_to_nat xs) = Bk \<up> n @ (Bk#xs)" by (simp add: replicate_app_Cons_same)
-    then have "\<exists>n. Bk # nat_to_tape (tape_to_nat xs) = Bk \<up> n @ nat_to_tape (2 * (tape_to_nat xs))" try
+    then have  "is_cell_list_eq (Bk # nat_to_tape (tape_to_nat xs)) (nat_to_tape (tape_to_nat xs))"
+    then have "is_cell_list_eq (Bk # nat_to_tape (tape_to_nat xs)) (Bk#xs)"  sorry
   next
     case Oc
     then show ?thesis sorry
@@ -80,8 +91,12 @@ fun turing_to_while :: "config \<Rightarrow> tprog0 \<Rightarrow> name \<Rightar
                      ELSE (''t''::=(V ''x''\<doteq>1);;IF ''t''\<noteq>0 THEN 
                             encode_tape_instr a1;;(nth_name s1)::=A (N 0);;(as_string n)::=A (N 1)
                           ELSE encode_tape_instr a0;;(nth_name s0)::=A (N 0);;(as_string n)::=A (N 1)) "
-lemma empty_not_wf: "\<not>tm_wf ([],1)" by simp
 
+lemma conversion_step_correct: 
+  assumes tm_wf: "tm_wf (p,1)"
+  and tm_accepts: "is_final(steps c (p,1) n)"
+  and "(turing_to_while c p (next default), \<lambda>s. if s = ''__'' then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s " 
+  shows "encode_tape (steps c (p,1) n) = (s ''_'',s ''x'', s ''y'')"
 
 lemma conversion_correct:
   assumes tm_wf: "tm_wf (p,1)"
