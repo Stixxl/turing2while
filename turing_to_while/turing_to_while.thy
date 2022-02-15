@@ -23,50 +23,65 @@ fun nat_to_tape :: "nat \<Rightarrow> cell list" where
 
 fun decode_tape :: "enc_tape \<Rightarrow> config" where
 "decode_tape (z,n,m) = (z, nat_to_tape n, nat_to_tape m)"
+value "nat_to_tape(13)"
+value "tape_to_nat([Oc,Bk,Oc,Oc])"
+value "tape_to_nat([Bk,Bk,Bk,Bk,Oc,Bk,Bk])"
+value "nat_to_tape(tape_to_nat([Bk,Oc]))"
 
 fun is_cell_list_eq :: "cell list \<Rightarrow> cell list \<Rightarrow> bool" where (*proof correctness; how? probably via proofing equality on fetch command*)
 "is_cell_list_eq xs ys = (dropWhile (\<lambda>x. x = Bk)(rev xs)  = dropWhile (\<lambda>y. y = Bk) (rev ys))"
 
 
-lemma nat_to_tape_bk: "\<lbrakk>n > 0\<rbrakk> \<Longrightarrow> Bk # (nat_to_tape n) = nat_to_tape (2*n)"
-  apply(induct n)
+lemma tape_to_nat_app_bk[simp]: "tape_to_nat (xs @ [Bk]) = tape_to_nat xs"
+  apply(induct xs)
    apply(auto)
   done
-lemma is_cell_list_eq_bk: "is_cell_list_eq (xs @ [Bk]) xs"
-   apply(simp)
+
+lemma tape_to_nat_elim_bk[simp]: "tape_to_nat(Bk#xs) = 2 * tape_to_nat xs"
+  by simp
+
+lemma is_cell_list_eq_same[simp]: "is_cell_list_eq xs xs"
+  apply(induct xs)
+   apply(auto)
   done
 
 lemma tape_to_nat_inverse: "tape_to_nat(nat_to_tape n) = n"
-proof(induct n)
-  case 0
+proof(induct n rule: nat_to_tape.induct)
+  case 1
   then show ?case by simp
 next
-  case (Suc n)
+  case (2 v)
   then show ?case sorry
 qed
 
-
-lemma nat_to_tape_inverse: "is_cell_list_eq (nat_to_tape(tape_to_nat xs)) xs"
-proof (induction xs rule: tape_to_nat.induct)
-  case 1
-  then show ?case by auto
-next
-  case (2 x xs)
-  then show ?case
-  proof (cases x)
-    case Bk
-    then have  "is_cell_list_eq (Bk # nat_to_tape (tape_to_nat xs)) (nat_to_tape (tape_to_nat xs))"
-    then have "is_cell_list_eq (Bk # nat_to_tape (tape_to_nat xs)) (Bk#xs)"  sorry
-  next
-    case Oc
-    then show ?thesis sorry
-  qed
-qed
-
-
-lemma tape_to_nat_inverse: "tape_to_nat(nat_to_tape n) = n"
+lemma tape_to_nat_app_occ: "tape_to_nat (xs @ [Oc]) = 2 ^ (length xs) + tape_to_nat xs"
   sorry
 
+lemma nat_to_tape_app_occ: "2 ^ (length xs) + tape_to_nat xs"
+
+lemma is_cell_list_eq_app_occ[simp]: "is_cell_list_eq (xy @ [Oc]) (xs @ [Oc]) \<longleftrightarrow> (xy @ [Oc]) = (xs @ [Oc])"
+  by simp
+
+lemma nat_to_tape_inverse: "is_cell_list_eq (nat_to_tape(tape_to_nat xs)) xs"
+proof (induction xs rule: rev_induct)
+  case Nil
+  then show ?case by simp
+next
+  case (snoc x xs)
+  then show ?case
+  proof(cases x)
+    case Bk
+    from "snoc.IH" have "is_cell_list_eq (nat_to_tape (tape_to_nat xs)) (xs @ [Bk])" by simp
+    then have "is_cell_list_eq (nat_to_tape (tape_to_nat xs) @ [Bk]) (xs @ [Bk])" by simp
+    then have "is_cell_list_eq (nat_to_tape (tape_to_nat (xs @ [Bk]))) (xs @ [Bk])" by simp
+    thus ?thesis by (simp add: Bk)
+  next
+    case Oc
+    from "snoc.IH" have "is_cell_list_eq (nat_to_tape (tape_to_nat (xs @ [Oc]))) (xs @ [Oc])"
+    then show ?thesis sorry
+
+  qed
+qed
 lemma encode_decode_inverse: "(z,x,y) = encode_tape(decode_tape(z,x,y))"
   sorry
 
@@ -92,17 +107,46 @@ fun turing_to_while :: "config \<Rightarrow> tprog0 \<Rightarrow> name \<Rightar
                             encode_tape_instr a1;;(nth_name s1)::=A (N 0);;(as_string n)::=A (N 1)
                           ELSE encode_tape_instr a0;;(nth_name s0)::=A (N 0);;(as_string n)::=A (N 1)) "
 
+
+
+lemma update_passthrough_nop[simp]: "turing_to_while (s,update Nop (l,r)) p (next default) = turing_to_while (s,l,r) p (next default)"
+  by simp
+lemma update_state_nop[simp]: 
+  assumes tm_conversion: "(turing_to_while (q,l,r) p (next default),\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s"
+    and tm_nop_conversion: "(turing_to_while (q,update Nop (l,r)) p (next default),\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s'"
+  shows "s = s'"
+proof -
+  from tm_conversion have "(turing_to_while (q,l,r) p (next default),\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s" by simp
+  then have "(turing_to_while (q,update Nop (l,r)) p (next default),\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s" by simp
+  thus ?thesis using bigstep_det tm_nop_conversion by auto
+qed
+lemma update_passthrough_w0[simp]: "turing_to_while (s,update W0 (l,r)) p (next default) = turing_to_while (s,l,Bk#(tl r)) p (next default)"
+  by simp
+lemma update_state_w0[simp]: 
+  assumes tm_conversion: "(turing_to_while (q,l,r) p (next default),\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s"
+    and tm_nop_conversion: "(turing_to_while (q,update W0 (l,r)) p (next default),\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k' \<^esup> s'"
+  shows "s ''z'' = s' ''z''" (* \<and> s ''x'' = s' ''x'' \<and> s ''y'' \<ge> s' ''y''" *)
+proof(induct "q l r p" rule: turing_to_while.induct)
+qed
+lemma update_passthrough_w1[simp]: "turing_to_while (s,update W1 (l,r)) p (next default) = turing_to_while (s,l,Oc#(tl r)) p (next default)"
+  by simp
+lemma update_passthrough_L[simp]: "turing_to_while (s,update L (l,r)) p (next default) = turing_to_while (s,tl l,if l=[] then Bk# r else (hd l)#r) p (next default)"
+  by simp
+lemma update_passthrough_R[simp]: "turing_to_while (s,update R (l,r)) p (next default) = turing_to_while (s,if r=[] then Bk# l else (hd r)#l, tl r) p (next default)"
+  by simp
+
+
 lemma conversion_step_correct: 
   assumes tm_wf: "tm_wf (p,1)"
-  and tm_accepts: "is_final(steps c (p,1) n)"
-  and "(turing_to_while c p (next default), \<lambda>s. if s = ''__'' then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s " 
-  shows "encode_tape (steps c (p,1) n) = (s ''_'',s ''x'', s ''y'')"
-
+  and "(turing_to_while (state,l,r) p (next default), \<lambda>s. if s = nth_name state then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s " 
+  and "encode_tape (step0 c p) = (s1,l1,r1)"
+  shows "(l1,r1) = (s ''x'', s ''y'') \<and> s (nth_name state) = 0"
+  sorry
 lemma conversion_correct:
-  assumes tm_wf: "tm_wf (p,1)"
-  and tm_accepts: "is_final(steps c (p,1) n)"
+  assumes tm_wf: "tm_wf (p,0)"
+  and tm_accepts: "is_final(steps0 c p n)"
   and "(turing_to_while c p (next default), \<lambda>s. if s = ''__'' then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s " 
-  shows "encode_tape (steps c (p,1) n) = (s ''_'',s ''x'', s ''y'')"
+  shows "encode_tape (steps0 c p n) = (s ''_'',s ''x'', s ''y'')"
   using assms proof (induct p)
       case Nil
       then show ?case using tm_wf by force
