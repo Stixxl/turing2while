@@ -106,7 +106,7 @@ fun encode_tape_instr :: "action  \<Rightarrow> com" where
                                   W0 \<Rightarrow> ''y''::= (V ''y''\<then>);;''y''::= (V ''y''\<lless>) |
                                   W1 \<Rightarrow> ''y''::= (V ''y''\<then>);;''y''::=(V ''y''\<lless>);;''y''::= ((V ''y'') \<oplus> (N 1)) |
                                   L \<Rightarrow> ''y''::= (V ''y''\<lless>);;''t''::=(V ''x''\<doteq>1);;''y''::= ((V ''y'') \<oplus> (V ''t''));; ''x''::= (V ''x''\<then>) |
-                                  R \<Rightarrow>''x''::= (V ''x''\<lless>);;''t''::=(V ''y''\<doteq>1);;''x''::= ((V ''x'') \<oplus> (V ''t''));;''y''::= (V ''y''\<then>))"
+                                  R \<Rightarrow> ''x''::= (V ''x''\<lless>);;''t''::=(V ''y''\<doteq>1);;''x''::= ((V ''x'') \<oplus> (V ''t''));;''y''::= (V ''y''\<then>))"
 
 lemma rightShift_state: 
   assumes rightShift_com: "(v::= (V v\<then>), s) \<Rightarrow>\<^bsup> k \<^esup> s'"
@@ -204,10 +204,12 @@ shows "s ''x'' = s' ''x'' div 2"
     by (smt (z3) \<open>(c;; ''y'' ::= V ''y''\<lless>;; ''t'' ::= (V ''x'' \<doteq>1);; ''y'' ::= (V ''y'' \<oplus> V ''t'');; ''x'' ::= (V ''x''\<then>), s0) \<Rightarrow>\<^bsup> k \<^esup> s\<close> \<open>s1 = s'\<close> atomVal.simps(1) aval.simps(5) big_step_t_determ2 char.inject fun_upd_other fun_upd_same list.inject)
 qed
 
+
+
 lemma encode_L_y: 
   assumes encode_L: "(c;;(encode_tape_instr L),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
     and encode_instr: "(c,s0) \<Rightarrow>\<^bsup> k' \<^esup> s'"
-  shows"s ''y'' = (if even (s' ''x'') then s' ''y'' * 2 else  s' ''y'' * 2 + 1)"
+  shows "s ''y'' = s' ''y'' * 2 + s' ''x'' mod 2"
   using assms proof -
   obtain k' s1 k'' where "(c,s0) \<Rightarrow>\<^bsup> k' \<^esup> s1" and
          "(encode_tape_instr L,s1) \<Rightarrow>\<^bsup> k'' \<^esup> s" and
@@ -220,8 +222,49 @@ lemma encode_L_y:
     (''t'' := s1 ''x'' mod 2, ''y'' := LeftShift_nat (s1 ''y'') + s1 ''x'' mod 2,
      ''x'' := aval (V ''x''\<then>) (s1(''t'' := s1 ''x'' mod 2, ''y'' := LeftShift_nat (s1 ''y'') + s1 ''x'' mod 2)))"
     apply(rule Seq) apply(rule Seq) apply(rule Seq) apply(rule Seq) apply(auto) apply(fact) apply(rule AssignI) using \<open>k' + k'' = k\<close> \<open>k'' = 8\<close> by auto
-  then show ?thesis sorry
+  then show ?thesis
+    by (smt (z3) \<open>(c;; ''y'' ::= V ''y''\<lless>;; ''t'' ::= (V ''x'' \<doteq>1);; ''y'' ::= (V ''y'' \<oplus> V ''t'');; ''x'' ::= (V ''x''\<then>), s0) \<Rightarrow>\<^bsup> k \<^esup> s\<close> \<open>s1 = s'\<close> big_step_t_determ2 char.inject fun_upd_apply le_add1 list.inject mult_2_right)
   qed
+
+lemma encode_R_x: 
+  assumes encode_R: "(c;;(encode_tape_instr R),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
+    and encode_instr: "(c,s0) \<Rightarrow>\<^bsup> k' \<^esup> s'"
+shows "s ''y'' = s' ''y'' div 2"
+  using assms proof -
+  obtain k' s1 k'' where "(c,s0) \<Rightarrow>\<^bsup> k' \<^esup> s1" and
+         "(encode_tape_instr R,s1) \<Rightarrow>\<^bsup> k'' \<^esup> s" and
+         "k'' = 8" using encode_R by fastforce
+  then have "s1 = s'" using big_step_t_determ2 encode_instr by blast
+  have "k' + k'' = k"
+    by (meson Seq \<open>(c, s0) \<Rightarrow>\<^bsup> k' \<^esup> s1\<close> \<open>(encode_tape_instr R, s1) \<Rightarrow>\<^bsup> k'' \<^esup> s\<close> big_step_t_determ2 encode_R)
+  from encode_R have "(c;;''x''::= (V ''x''\<lless>);;''t''::=(V ''y''\<doteq>1);;''x''::= ((V ''x'') \<oplus> (V ''t''));;''y''::= (V ''y''\<then>),s0) \<Rightarrow>\<^bsup> k \<^esup> s" by fastforce
+  have "(c;;''x''::= (V ''x''\<lless>);;''t''::=(V ''y''\<doteq>1);;''x''::= ((V ''x'') \<oplus> (V ''t''));;''y''::= (V ''y''\<then>),s0) \<Rightarrow>\<^bsup> k \<^esup> s1
+    (''t'' := s1 ''y'' mod 2, ''x'' := LeftShift_nat (s1 ''x'') + s1 ''y'' mod 2,
+     ''y'' := aval (V ''y''\<then>) (s1(''t'' := s1 ''y'' mod 2, ''x'' := LeftShift_nat (s1 ''x'') + s1 ''y'' mod 2)))"
+    apply(rule Seq) apply(rule Seq) apply(rule Seq) apply(rule Seq) apply(auto) apply(fact) apply(rule AssignI) using \<open>k' + k'' = k\<close> \<open>k'' = 8\<close> by auto
+  then show ?thesis
+    by (smt (z3) \<open>(c;; ''x'' ::= V ''x''\<lless>;; ''t'' ::= (V ''y'' \<doteq>1);; ''x'' ::= (V ''x'' \<oplus> V ''t'');; ''y'' ::= (V ''y''\<then>), s0) \<Rightarrow>\<^bsup> k \<^esup> s\<close> \<open>s1 = s'\<close> atomVal.simps(1) aval.simps(5) big_step_t_determ2 char.inject fun_upd_other fun_upd_same list.inject)
+qed
+
+lemma encode_R_y: 
+  assumes encode_R: "(c;;(encode_tape_instr R),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
+    and encode_instr: "(c,s0) \<Rightarrow>\<^bsup> k' \<^esup> s'"
+shows "s ''x'' = s' ''x'' * 2 + s' ''y'' mod 2"
+  using assms proof -
+  obtain k' s1 k'' where "(c,s0) \<Rightarrow>\<^bsup> k' \<^esup> s1" and
+         "(encode_tape_instr R,s1) \<Rightarrow>\<^bsup> k'' \<^esup> s" and
+         "k'' = 8" using encode_R by fastforce
+  then have "s1 = s'" using big_step_t_determ2 encode_instr by blast
+  have "k' + k'' = k"
+    by (meson Seq \<open>(c, s0) \<Rightarrow>\<^bsup> k' \<^esup> s1\<close> \<open>(encode_tape_instr R, s1) \<Rightarrow>\<^bsup> k'' \<^esup> s\<close> big_step_t_determ2 encode_R)
+  from encode_R have "(c;;''x''::= (V ''x''\<lless>);;''t''::=(V ''y''\<doteq>1);;''x''::= ((V ''x'') \<oplus> (V ''t''));;''y''::= (V ''y''\<then>),s0) \<Rightarrow>\<^bsup> k \<^esup> s" by fastforce
+  have "(c;;''x''::= (V ''x''\<lless>);;''t''::=(V ''y''\<doteq>1);;''x''::= ((V ''x'') \<oplus> (V ''t''));;''y''::= (V ''y''\<then>),s0) \<Rightarrow>\<^bsup> k \<^esup> s1
+    (''t'' := s1 ''y'' mod 2, ''x'' := LeftShift_nat (s1 ''x'') + s1 ''y'' mod 2,
+     ''y'' := aval (V ''y''\<then>) (s1(''t'' := s1 ''y'' mod 2, ''x'' := LeftShift_nat (s1 ''x'') + s1 ''y'' mod 2)))"
+    apply(rule Seq) apply(rule Seq) apply(rule Seq) apply(rule Seq) apply(auto) apply(fact) apply(rule AssignI) using \<open>k' + k'' = k\<close> \<open>k'' = 8\<close> by auto
+  then show ?thesis
+      by (smt (z3) \<open>(c;;''x''::= (V ''x''\<lless>);;''t''::=(V ''y''\<doteq>1);;''x''::= ((V ''x'') \<oplus> (V ''t''));;''y''::= (V ''y''\<then>),s0) \<Rightarrow>\<^bsup> k \<^esup> s\<close> \<open>s1 = s'\<close> big_step_t_determ2 char.inject fun_upd_apply le_add1 list.inject mult_2_right)
+     qed
 
 
 
