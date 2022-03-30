@@ -39,6 +39,7 @@ value "nat_to_tape(13)"
 value "tape_to_nat([Oc,Bk,Oc,Oc])"
 value "tape_to_nat([Bk,Bk,Bk,Bk,Oc,Bk,Bk])"
 value "nat_to_tape(tape_to_nat([Bk,Oc]))"
+value "tape_to_nat([Oc])"
 
 fun is_cell_list_eq :: "cell list \<Rightarrow> cell list \<Rightarrow> bool" where (*proof correctness; how? probably via proofing equality on fetch command*)
 "is_cell_list_eq xs ys = (dropWhile (\<lambda>x. x = Bk)(rev xs)  = dropWhile (\<lambda>y. y = Bk) (rev ys))"
@@ -48,9 +49,6 @@ lemma tape_to_nat_app_bk[simp]: "tape_to_nat (xs @ [Bk]) = tape_to_nat xs"
   apply(induct xs)
    apply(auto)
   done
-
-lemma tape_to_nat_elim_bk[simp]: "tape_to_nat(Bk#xs) = 2 * tape_to_nat xs"
-  by simp
 
 lemma is_cell_list_eq_same[simp]: "is_cell_list_eq xs xs"
   apply(induct xs)
@@ -63,13 +61,31 @@ proof(induct n rule: nat_to_tape.induct)
   then show ?case by simp
 next
   case (2 v)
-  then show ?case sorry
+  then show ?case
+    proof (cases v rule: parity_cases)
+    case even
+    then have "tape_to_nat (nat_to_tape (Suc v)) = tape_to_nat (Oc # nat_to_tape (Suc v div 2))" by auto
+    then have "... = 2 * tape_to_nat(nat_to_tape (Suc v div 2)) + 1" by simp
+    then have "... =  2 * (Suc v div 2) + 1" using "2" by simp
+    then show ?thesis 
+      by (metis \<open>tape_to_nat (Oc # nat_to_tape (Suc v div 2)) = 2 * tape_to_nat (nat_to_tape (Suc v div 2)) + 1\<close> \<open>tape_to_nat (nat_to_tape (Suc v)) = tape_to_nat (Oc # nat_to_tape (Suc v div 2))\<close> even(1) even_Suc odd_two_times_div_two_succ)
+  next
+    case odd
+    then have "tape_to_nat (nat_to_tape (Suc v)) = tape_to_nat (Bk # nat_to_tape (Suc v div 2))" by simp
+    then have "... =  2 * tape_to_nat (nat_to_tape (Suc v div 2))" by simp
+    then have "... = 2 * Suc v div 2" by (metis "2" div_mult_swap even_Suc odd(1))
+    then show ?thesis
+      by (metis \<open>tape_to_nat (Bk # nat_to_tape (Suc v div 2)) = 2 * tape_to_nat (nat_to_tape (Suc v div 2))\<close> \<open>tape_to_nat (nat_to_tape (Suc v)) = tape_to_nat (Bk # nat_to_tape (Suc v div 2))\<close> nonzero_mult_div_cancel_left zero_neq_numeral)
+  qed
 qed
 
 lemma nat_to_tape_app_occ: "tape_to_nat(xs @ [Oc]) = 2 ^ (length xs) + tape_to_nat xs"
   sorry
 
-lemma is_cell_list_eq_app_occ[simp]: "is_cell_list_eq (xy @ [Oc]) (xs @ [Oc]) \<longleftrightarrow> (xy @ [Oc]) = (xs @ [Oc])"
+lemma n2t_no_leading_Bk: "nat_to_tape n = [] \<or> (\<exists>xs. nat_to_tape n = xs@[Oc])"
+  try
+
+lemma is_cell_list_eq_app_occ[simp]: "is_cell_list_eq (xy @ [Oc]) (xs @ [Oc]) \<longleftrightarrow> xy = xs"
   by simp
 
 lemma nat_to_tape_inverse: "is_cell_list_eq (nat_to_tape(tape_to_nat xs)) xs"
@@ -87,9 +103,9 @@ next
     thus ?thesis by (simp add: Bk)
   next
     case Oc
-    from "snoc.IH" have "is_cell_list_eq (nat_to_tape (tape_to_nat (xs @ [Oc]))) (xs @ [Oc])"
-    then show ?thesis try
-
+    from "snoc.IH" have "is_cell_list_eq (nat_to_tape (tape_to_nat xs)) xs" by simp
+    then have "is_cell_list_eq (nat_to_tape (tape_to_nat xs) @ [Oc]) (xs @ [Oc])" 
+    then show ?thesis by auto
   qed
 qed
 lemma encode_decode_inverse: "(z,x,y) = encode_tape(decode_tape(z,x,y))"
@@ -101,6 +117,7 @@ subsection "Encoding of Tape Instructions As arithmetic Operations"
 
 abbreviation LeftShift:: "atomExp \<Rightarrow> aexp" ("_\<lless>") where
 "LeftShift a \<equiv> Plus a a"
+
 fun encode_tape_instr :: "action  \<Rightarrow> com" where
 "encode_tape_instr a = (case a of Nop \<Rightarrow> SKIP |
                                   W0 \<Rightarrow> ''y''::= (V ''y''\<then>);;''y''::= (V ''y''\<lless>) |
@@ -204,8 +221,6 @@ shows "s ''x'' = s' ''x'' div 2"
     by (smt (z3) \<open>(c;; ''y'' ::= V ''y''\<lless>;; ''t'' ::= (V ''x'' \<doteq>1);; ''y'' ::= (V ''y'' \<oplus> V ''t'');; ''x'' ::= (V ''x''\<then>), s0) \<Rightarrow>\<^bsup> k \<^esup> s\<close> \<open>s1 = s'\<close> atomVal.simps(1) aval.simps(5) big_step_t_determ2 char.inject fun_upd_other fun_upd_same list.inject)
 qed
 
-
-
 lemma encode_L_y: 
   assumes encode_L: "(c;;(encode_tape_instr L),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
     and encode_instr: "(c,s0) \<Rightarrow>\<^bsup> k' \<^esup> s'"
@@ -224,7 +239,7 @@ lemma encode_L_y:
     apply(rule Seq) apply(rule Seq) apply(rule Seq) apply(rule Seq) apply(auto) apply(fact) apply(rule AssignI) using \<open>k' + k'' = k\<close> \<open>k'' = 8\<close> by auto
   then show ?thesis
     by (smt (z3) \<open>(c;; ''y'' ::= V ''y''\<lless>;; ''t'' ::= (V ''x'' \<doteq>1);; ''y'' ::= (V ''y'' \<oplus> V ''t'');; ''x'' ::= (V ''x''\<then>), s0) \<Rightarrow>\<^bsup> k \<^esup> s\<close> \<open>s1 = s'\<close> big_step_t_determ2 char.inject fun_upd_apply le_add1 list.inject mult_2_right)
-  qed
+qed
 
 lemma encode_R_x: 
   assumes encode_R: "(c;;(encode_tape_instr R),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
@@ -264,7 +279,7 @@ shows "s ''x'' = s' ''x'' * 2 + s' ''y'' mod 2"
     apply(rule Seq) apply(rule Seq) apply(rule Seq) apply(rule Seq) apply(auto) apply(fact) apply(rule AssignI) using \<open>k' + k'' = k\<close> \<open>k'' = 8\<close> by auto
   then show ?thesis
       by (smt (z3) \<open>(c;;''x''::= (V ''x''\<lless>);;''t''::=(V ''y''\<doteq>1);;''x''::= ((V ''x'') \<oplus> (V ''t''));;''y''::= (V ''y''\<then>),s0) \<Rightarrow>\<^bsup> k \<^esup> s\<close> \<open>s1 = s'\<close> big_step_t_determ2 char.inject fun_upd_apply le_add1 list.inject mult_2_right)
-     qed
+qed
 
 
 
@@ -287,9 +302,6 @@ fun turing_to_while :: "config \<Rightarrow> tprog0 \<Rightarrow> com" where
 "turing_to_while c p = (let (z,x,y) = encode_tape c in (''z''::=A (N z);;''x''::=A (N x);;''y''::=A (N y)));;
                                           WHILE (as_string (default::name))\<noteq>0 DO turing_to_while_acc p (next default)"
 
-
-lemma update_passthrough_nop[simp]: "turing_to_while (s,update Nop (l,r)) p = turing_to_while (s,l,r) p"
-  by simp
 lemma update_state_nop[simp]: 
   assumes tm_conversion: "(turing_to_while (q,l,r) p,\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s"
     and tm_nop_conversion: "(turing_to_while (q,update Nop (l,r)) p,\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s'"
@@ -299,26 +311,6 @@ proof -
   then have "(turing_to_while (q,update Nop (l,r)) p,\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s" by simp
   thus ?thesis using bigstep_det tm_nop_conversion by auto
 qed
-lemma update_passthrough_w0[simp]: "turing_to_while (s,update W0 (l,r)) p = turing_to_while (s,l,Bk#(tl r)) p"
-  by simp
-lemma update_state_w0[simp]:  
-  assumes tm_wf: "tm_wf (p,1)"
-  and tm_conversion: "(turing_to_while (q,l,r) p,\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s"
-  and tm_nop_conversion: "(turing_to_while (q,update W0 (l,r)) p,\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k' \<^esup> s'"
-  shows "s ''x'' = s' ''x''" (* \<and> s ''x'' = s' ''x'' \<and> s ''y'' \<ge> s' ''y''" *)
-using assms proof(induct p arbitrary: k k')
-  case Nil
-  then show ?case by simp
-next
-  case (Cons a p)
-  then show ?case by auto
-qed
-lemma update_passthrough_w1[simp]: "turing_to_while (s,update W1 (l,r)) p  = turing_to_while (s,l,Oc#(tl r)) p"
-  by simp
-lemma update_passthrough_L[simp]: "turing_to_while (s,update L (l,r)) p = turing_to_while (s,tl l,if l=[] then Bk# r else (hd l)#r) p"
-  by simp
-lemma update_passthrough_R[simp]: "turing_to_while (s,update R (l,r)) p = turing_to_while (s,if r=[] then Bk# l else (hd r)#l, tl r) p"
-  by simp
 
 
 lemma conversion_step_correct: 
