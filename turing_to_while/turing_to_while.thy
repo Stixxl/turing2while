@@ -13,6 +13,11 @@ fun tape_to_nat :: "cell list \<Rightarrow> nat" where
 "tape_to_nat (x#xs) = (if x = Bk then LeftShift_nat (tape_to_nat xs)
                                    else LeftShift_nat (tape_to_nat xs) + 1)"
 
+lemma t2n_0: "(\<forall>x\<in> set xs. x = Bk) \<longleftrightarrow>  tape_to_nat xs = 0 "
+  apply(induct xs)
+   apply(auto)
+  done
+
 fun encode_tape :: "config \<Rightarrow> enc_tape" where
 "encode_tape (s,ls,rs) = (s, tape_to_nat ls, tape_to_nat rs)"
 
@@ -55,6 +60,22 @@ lemma is_cell_list_eq_same[simp]: "is_cell_list_eq xs xs"
    apply(auto)
   done
 
+lemma is_cell_list_eq_cons:
+  assumes "is_cell_list_eq xs ys"
+  shows "is_cell_list_eq (x#xs) (x#ys)"
+using assms proof -
+  have "(dropWhile (\<lambda>x. x = Bk)(rev xs) = dropWhile (\<lambda>y. y = Bk) (rev ys))" using assms by auto
+  then have "(if (\<forall>x\<in>set xs.  x = Bk) then dropWhile(\<lambda>x. x = Bk) [] else dropWhile (\<lambda>x. x = Bk) (rev xs) @ []) = 
+            (if (\<forall>x\<in>set ys.  x = Bk) then dropWhile(\<lambda>x. x = Bk) [] else dropWhile (\<lambda>x. x = Bk) (rev ys) @ [])" 
+    by (smt (verit, best) dropWhile_eq_Nil_conv set_rev)
+  then have "(if (\<forall>x\<in>set xs.  x = Bk) then dropWhile(\<lambda>x. x = Bk) [x] else dropWhile (\<lambda>x. x = Bk) (rev xs) @ [x]) = 
+            (if (\<forall>x\<in>set ys.  x = Bk) then dropWhile(\<lambda>x. x = Bk) [x] else dropWhile (\<lambda>x. x = Bk) (rev ys) @ [x])"
+    by (smt (verit, best) \<open>dropWhile (\<lambda>x. x = Bk) (rev xs) = dropWhile (\<lambda>y. y = Bk) (rev ys)\<close> dropWhile_eq_Nil_conv set_rev)
+  then have "(dropWhile (\<lambda>x. x = Bk)((rev xs) @ [x]) = dropWhile (\<lambda>y. y = Bk) ((rev ys) @ [x]))" by (simp add: dropWhile_append)
+  then show ?thesis by simp
+qed
+
+
 lemma tape_to_nat_inverse: "tape_to_nat(nat_to_tape n) = n"
 proof(induct n rule: nat_to_tape.induct)
   case 1
@@ -65,49 +86,47 @@ next
     proof (cases v rule: parity_cases)
     case even
     then have "tape_to_nat (nat_to_tape (Suc v)) = tape_to_nat (Oc # nat_to_tape (Suc v div 2))" by auto
-    then have "... = 2 * tape_to_nat(nat_to_tape (Suc v div 2)) + 1" by simp
-    then have "... =  2 * (Suc v div 2) + 1" using "2" by simp
-    then show ?thesis 
-      by (metis \<open>tape_to_nat (Oc # nat_to_tape (Suc v div 2)) = 2 * tape_to_nat (nat_to_tape (Suc v div 2)) + 1\<close> \<open>tape_to_nat (nat_to_tape (Suc v)) = tape_to_nat (Oc # nat_to_tape (Suc v div 2))\<close> even(1) even_Suc odd_two_times_div_two_succ)
+    also have "... = 2 * tape_to_nat(nat_to_tape (Suc v div 2)) + 1" by simp
+    also have "... = 2 * (Suc v div 2) + 1" using "2" by simp
+    then show ?thesis by (metis calculation even(1) even_Suc odd_two_times_div_two_succ)
   next
     case odd
     then have "tape_to_nat (nat_to_tape (Suc v)) = tape_to_nat (Bk # nat_to_tape (Suc v div 2))" by simp
-    then have "... =  2 * tape_to_nat (nat_to_tape (Suc v div 2))" by simp
-    then have "... = 2 * Suc v div 2" by (metis "2" div_mult_swap even_Suc odd(1))
-    then show ?thesis
-      by (metis \<open>tape_to_nat (Bk # nat_to_tape (Suc v div 2)) = 2 * tape_to_nat (nat_to_tape (Suc v div 2))\<close> \<open>tape_to_nat (nat_to_tape (Suc v)) = tape_to_nat (Bk # nat_to_tape (Suc v div 2))\<close> nonzero_mult_div_cancel_left zero_neq_numeral)
-  qed
+    also have "... = 2 * tape_to_nat (nat_to_tape (Suc v div 2))" by simp
+    also have "... = 2 * Suc v div 2" by (metis "2" div_mult_swap even_Suc odd(1))
+    finally show ?thesis by auto
+        qed
 qed
-
-lemma nat_to_tape_app_occ: "tape_to_nat(xs @ [Oc]) = 2 ^ (length xs) + tape_to_nat xs"
-  sorry
-
-lemma n2t_no_leading_Bk: "nat_to_tape n = [] \<or> (\<exists>xs. nat_to_tape n = xs@[Oc])"
-  try
-
-lemma is_cell_list_eq_app_occ[simp]: "is_cell_list_eq (xy @ [Oc]) (xs @ [Oc]) \<longleftrightarrow> xy = xs"
-  by simp
 
 lemma nat_to_tape_inverse: "is_cell_list_eq (nat_to_tape(tape_to_nat xs)) xs"
-proof (induction xs rule: rev_induct)
-  case Nil
+proof (induction xs rule: tape_to_nat.induct)
+  case 1
   then show ?case by simp
 next
-  case (snoc x xs)
-  then show ?case
-  proof(cases x)
+  case (2 x xs)
+  then show ?case proof (cases x)
     case Bk
-    from "snoc.IH" have "is_cell_list_eq (nat_to_tape (tape_to_nat xs)) (xs @ [Bk])" by simp
-    then have "is_cell_list_eq (nat_to_tape (tape_to_nat xs) @ [Bk]) (xs @ [Bk])" by simp
-    then have "is_cell_list_eq (nat_to_tape (tape_to_nat (xs @ [Bk]))) (xs @ [Bk])" by simp
-    thus ?thesis by (simp add: Bk)
+    then have "is_cell_list_eq (nat_to_tape(tape_to_nat xs)) xs" using 2 by simp
+    then have Bk_cons: "is_cell_list_eq (Bk # nat_to_tape(tape_to_nat xs)) (Bk#xs)" using is_cell_list_eq_cons by fast
+    consider "(\<forall>x\<in>set xs. x = Bk)" | "Oc \<in> set xs" using cell.exhaust by auto
+    then have "is_cell_list_eq (nat_to_tape(2 * tape_to_nat xs)) (Bk#xs)" proof (cases)
+      case 1
+       then show ?thesis using t2n_0 Bk_cons by simp
+    next
+      case 2
+      then show ?thesis using Bk_cons using t2n_0 by fastforce
+    qed (* case distinction on xs all blank vs some Oc *)
+    then show ?thesis by (simp add: Bk mult_2)
   next
     case Oc
-    from "snoc.IH" have "is_cell_list_eq (nat_to_tape (tape_to_nat xs)) xs" by simp
-    then have "is_cell_list_eq (nat_to_tape (tape_to_nat xs) @ [Oc]) (xs @ [Oc])" 
-    then show ?thesis by auto
+    then have "is_cell_list_eq (nat_to_tape(tape_to_nat xs)) xs" using 2 by simp
+    then have "is_cell_list_eq (Oc # nat_to_tape(tape_to_nat xs)) (Oc#xs)" using is_cell_list_eq_cons by fast
+    then have "is_cell_list_eq (nat_to_tape(2 * tape_to_nat xs + 1)) (Oc#xs)" by simp
+    then show ?thesis by (simp add: Oc mult_2)
   qed
 qed
+
+
 lemma encode_decode_inverse: "(z,x,y) = encode_tape(decode_tape(z,x,y))"
   sorry
 
@@ -312,12 +331,11 @@ proof -
   thus ?thesis using bigstep_det tm_nop_conversion by auto
 qed
 
-
 lemma conversion_step_correct: 
   assumes tm_wf: "tm_wf (p,1)"
-  and "(turing_to_while (state,l,r) p, \<lambda>s. if s = nth_name state then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s " 
-  and "encode_tape (step0 c p) = (s1,l1,r1)"
-  shows "(l1,r1) = (s ''x'', s ''y'') \<and> s (nth_name state) = 0"
+  and "(turing_to_while_acc p (default::name), \<lambda>s. if s=''x'' then tape_to_nat l else if s=''y'' then tape_to_nat r else if s = nth_name state then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s " 
+  and "encode_tape (step0 (state,l,r) p) = (s1,l1,r1)"
+  shows "(s1,l1,r1) = (s ''z'', s ''x'', s ''y'')"
   sorry
 lemma conversion_correct:
   assumes tm_wf: "tm_wf (p,0)"
