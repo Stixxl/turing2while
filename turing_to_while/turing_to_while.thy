@@ -18,7 +18,6 @@ lemma t2n_0: "(\<forall>x\<in> set xs. x = Bk) \<longleftrightarrow>  tape_to_na
    apply(auto)
   done
 
-value "tl ([]::nat list)"
 lemma tape_to_nat_even: "even (tape_to_nat xs) \<longleftrightarrow> hd xs = Bk \<or> xs = []"
   apply (induct xs)
    apply(auto)
@@ -325,7 +324,47 @@ lemma encode_L_y:
     by (smt (z3) \<open>(c;; ''y'' ::= V ''y''\<lless>;; ''t'' ::= (V ''x'' \<doteq>1);; ''y'' ::= (V ''y'' \<oplus> V ''t'');; ''x'' ::= (V ''x''\<then>), s0) \<Rightarrow>\<^bsup> k \<^esup> s\<close> \<open>s1 = s'\<close> big_step_t_determ2 char.inject fun_upd_apply le_add1 list.inject mult_2_right)
 qed
 
-lemma encode_R_x: 
+lemma update_encode_L:
+  assumes encode_L: "((encode_tape_instr L),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
+  assumes update_L: "(l,r) = update L (l0,r0)"
+  and tape_state_eq: "s0 ''x'' = tape_to_nat l0 \<and> s0 ''y'' = tape_to_nat r0"
+shows "s ''x'' = tape_to_nat l \<and> s ''y'' = tape_to_nat r" 
+proof(intro conjI)
+  from encode_L encode_L_x have "s ''x'' = s0 ''x'' div 2" by auto
+  then have "s ''x'' = tape_to_nat l0 div 2" using tape_state_eq by simp
+  moreover have "l = tl l0" using update_L
+    by (metis Nil_tl Turing.update.simps(3) prod.inject)
+  moreover have "tape_to_nat (tl l0) = tape_to_nat l0 div 2" apply(induct l0) by auto
+  ultimately show "s ''x'' = tape_to_nat l" by simp 
+  next
+    from encode_L encode_L_y have "s ''y'' = s0 ''y'' * 2 + s0 ''x'' mod 2" by blast
+    then have "s ''y'' = tape_to_nat r0 * 2 + tape_to_nat l0 mod 2" using tape_state_eq by simp
+    have "r = (if l0 = [] then (Bk#r0) else (hd l0 # r0))" using update_L by auto
+    then have "tape_to_nat r =  tape_to_nat r0 * 2 + tape_to_nat l0 mod 2" proof (cases l0)
+      case Nil
+      then have "r = (Bk#r0)"
+        by (simp add: \<open>r = (if l0 = [] then Bk # r0 else hd l0 # r0)\<close>)
+      then show ?thesis using local.Nil by auto
+    next
+      case (Cons a list)
+      then show ?thesis proof (cases a)
+        case Bk
+      then have "r = (Bk#r0)" by (simp add: \<open>r = (if l0 = [] then Bk # r0 else hd l0 # r0)\<close> local.Cons)
+        then show ?thesis by (simp add: Bk local.Cons)
+      next
+        case Oc
+        then have "r = (Oc#r0)" by (simp add: \<open>r = (if l0 = [] then Bk # r0 else hd l0 # r0)\<close> local.Cons)
+        then have "tape_to_nat r =  tape_to_nat r0 * 2 + 1" by simp
+        have "odd(tape_to_nat (Oc#list))" by simp
+        then have "tape_to_nat (Oc#list) mod 2 = 1" by presburger
+        show ?thesis
+          using Oc \<open>tape_to_nat (Oc # list) mod 2 = 1\<close> \<open>tape_to_nat r = tape_to_nat r0 * 2 + 1\<close> local.Cons by auto
+      qed
+    qed
+    then show "s ''y'' = tape_to_nat r" by (simp add: \<open>s ''y'' = tape_to_nat r0 * 2 + tape_to_nat l0 mod 2\<close>)
+  qed
+
+lemma encode_R_y: 
   assumes encode_R: "(c;;(encode_tape_instr R),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
     and encode_instr: "(c,s0) \<Rightarrow>\<^bsup> k' \<^esup> s'"
 shows "s ''y'' = s' ''y'' div 2"
@@ -345,7 +384,7 @@ shows "s ''y'' = s' ''y'' div 2"
     by (smt (z3) \<open>(c;; ''x'' ::= V ''x''\<lless>;; ''t'' ::= (V ''y'' \<doteq>1);; ''x'' ::= (V ''x'' \<oplus> V ''t'');; ''y'' ::= (V ''y''\<then>), s0) \<Rightarrow>\<^bsup> k \<^esup> s\<close> \<open>s1 = s'\<close> atomVal.simps(1) aval.simps(5) big_step_t_determ2 char.inject fun_upd_other fun_upd_same list.inject)
 qed
 
-lemma encode_R_y: 
+lemma encode_R_x: 
   assumes encode_R: "(c;;(encode_tape_instr R),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
     and encode_instr: "(c,s0) \<Rightarrow>\<^bsup> k' \<^esup> s'"
 shows "s ''x'' = s' ''x'' * 2 + s' ''y'' mod 2"
@@ -365,6 +404,45 @@ shows "s ''x'' = s' ''x'' * 2 + s' ''y'' mod 2"
       by (smt (z3) \<open>(c;;''x''::= (V ''x''\<lless>);;''t''::=(V ''y''\<doteq>1);;''x''::= ((V ''x'') \<oplus> (V ''t''));;''y''::= (V ''y''\<then>),s0) \<Rightarrow>\<^bsup> k \<^esup> s\<close> \<open>s1 = s'\<close> big_step_t_determ2 char.inject fun_upd_apply le_add1 list.inject mult_2_right)
 qed
 
+lemma update_encode_R:
+  assumes encode_R: "((encode_tape_instr R),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
+  assumes update_R: "(l,r) = update R (l0,r0)"
+  and tape_state_eq: "s0 ''x'' = tape_to_nat l0 \<and> s0 ''y'' = tape_to_nat r0"
+shows "s ''x'' = tape_to_nat l \<and> s ''y'' = tape_to_nat r" 
+proof(intro conjI)
+  from encode_R encode_R_y have "s ''y'' = s0 ''y'' div 2" by auto
+  then have "s ''y'' = tape_to_nat r0 div 2" using tape_state_eq by simp
+  moreover have "r = tl r0" using update_R
+    by (metis Nil_tl Turing.update.simps(4) prod.inject)
+  moreover have "tape_to_nat (tl r0) = tape_to_nat r0 div 2" apply(induct r0) by auto
+  ultimately show "s ''y'' = tape_to_nat r" by simp 
+  next
+    from encode_R encode_R_x have "s ''x'' = s0 ''x'' * 2 + s0 ''y'' mod 2" by blast
+    then have "s ''x'' = tape_to_nat l0 * 2 + tape_to_nat r0 mod 2" using tape_state_eq by simp
+    have "l = (if r0 = [] then (Bk#l0) else (hd r0 # l0))" using update_R by auto
+    then have "tape_to_nat l =  tape_to_nat l0 * 2 + tape_to_nat r0 mod 2" proof (cases r0)
+      case Nil
+      then have "l = (Bk#l0)"
+        by (simp add: \<open>l = (if r0 = [] then (Bk#l0) else (hd r0 # l0))\<close>)
+      then show ?thesis using local.Nil by auto
+    next
+      case (Cons a list)
+      then show ?thesis proof (cases a)
+        case Bk
+      then have "l = (Bk#l0)" by (simp add: \<open>l = (if r0 = [] then (Bk#l0) else (hd r0 # l0))\<close> local.Cons)
+        then show ?thesis by (simp add: Bk local.Cons)
+      next
+        case Oc
+        then have "l = (Oc#l0)" by (simp add: \<open>l = (if r0 = [] then (Bk#l0) else (hd r0 # l0))\<close> local.Cons)
+        then have "tape_to_nat l =  tape_to_nat l0 * 2 + 1" by simp
+        have "odd(tape_to_nat (Oc#list))" by simp
+        then have "tape_to_nat (Oc#list) mod 2 = 1" by presburger
+        show ?thesis
+          using Oc \<open>tape_to_nat (Oc # list) mod 2 = 1\<close> \<open>tape_to_nat l =  tape_to_nat l0 * 2 + 1\<close> local.Cons by auto
+      qed
+    qed
+    then show "s ''x'' = tape_to_nat l" by (simp add: \<open>s ''x'' = tape_to_nat l0 * 2 + tape_to_nat r0 mod 2\<close>)
+  qed
 
 
 
