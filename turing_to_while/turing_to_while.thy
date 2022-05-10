@@ -1,149 +1,9 @@
 theory turing_to_while
-  imports Main "Turing" "../IMP-/Com" "../IMP-/Big_StepT" "../IMP-/Small_StepT" "../IMP-/Big_Step_Small_Step_Equivalence" "../fresh_names/Fresh_Class" "../IMP-/Max_Constant"
+  imports Main "Turing" "../IMP-/Com" "../IMP-/Big_StepT" "../IMP-/Small_StepT" "../IMP-/Big_Step_Small_Step_Equivalence"  "../IMP-/Max_Constant" "../fresh_names/Fresh_Class" "tape_nat_conversion"
 
 begin
-
-subsection "Transformation of the Tape to Natural Numbers and Back"
-type_synonym enc_tape = "nat \<times> nat \<times> nat"
-abbreviation LeftShift_nat:: "nat \<Rightarrow> nat" where
-" LeftShift_nat a \<equiv> a + a"
-
-fun tape_to_nat :: "cell list \<Rightarrow> nat" where
-"tape_to_nat [] = 0" |                
-"tape_to_nat (x#xs) = (if x = Bk then LeftShift_nat (tape_to_nat xs)
-                                   else LeftShift_nat (tape_to_nat xs) + 1)"
-
-lemma t2n_0: "(\<forall>x\<in> set xs. x = Bk) \<longleftrightarrow>  tape_to_nat xs = 0 "
-  apply(induct xs)
-   apply(auto)
-  done
-
-lemma tape_to_nat_even: "even (tape_to_nat xs) \<longleftrightarrow> hd xs = Bk \<or> xs = []"
-  apply (induct xs)
-   apply(auto)
-  done
-
-lemma tape_to_nat_odd: " xs \<noteq> [] \<Longrightarrow> odd (tape_to_nat xs) \<longleftrightarrow> hd xs = Oc"
-  apply (induct xs)
-  using cell.exhaust by auto
-
-fun encode_tape :: "config \<Rightarrow> enc_tape" where
-"encode_tape (s,ls,rs) = (s, tape_to_nat ls, tape_to_nat rs)"
-
-value "encode_tape (42, [Oc, Bk, Oc, Oc], [Oc, Bk, Oc, Oc])"
-
-fun nat_to_tape :: "nat \<Rightarrow> cell list" where
-"nat_to_tape 0 = []" |
-"nat_to_tape n = (if (n mod 2) = 1 then Oc else Bk) # nat_to_tape (n div 2)"
-
-
-lemma nat_to_tape_double[simp]: "n > 0 \<Longrightarrow> nat_to_tape (2 * n) = Bk # (nat_to_tape n)"
-  apply(induct n)
-   apply(auto)
-  done
-
-lemma nat_to_tape_nth_bit: "nat_to_tape (2^n) = replicate n Bk  @ [Oc]"
-  apply(induct n)
-   apply(auto)
-  done
-
-
-fun decode_tape :: "enc_tape \<Rightarrow> config" where
-"decode_tape (z,n,m) = (z, nat_to_tape n, nat_to_tape m)"
-value "nat_to_tape(13)"
-value "tape_to_nat([Oc,Bk,Oc,Oc])"
-value "tape_to_nat([Bk,Bk,Bk,Bk,Oc,Bk,Bk])"
-value "nat_to_tape(tape_to_nat([Bk,Oc]))"
-value "tape_to_nat([Oc])"
-
-fun is_cell_list_eq :: "cell list \<Rightarrow> cell list \<Rightarrow> bool" where (*proof correctness; how? probably via proofing equality on fetch command*)
-"is_cell_list_eq xs ys = (dropWhile (\<lambda>x. x = Bk)(rev xs)  = dropWhile (\<lambda>y. y = Bk) (rev ys))"
-
-
-lemma tape_to_nat_app_bk[simp]: "tape_to_nat (xs @ [Bk]) = tape_to_nat xs"
-  apply(induct xs)
-   apply(auto)
-  done
-
-lemma is_cell_list_eq_same[simp]: "is_cell_list_eq xs xs"
-  apply(induct xs)
-   apply(auto)
-  done
-
-lemma is_cell_list_eq_cons:
-  assumes "is_cell_list_eq xs ys"
-  shows "is_cell_list_eq (x#xs) (x#ys)"
-using assms proof -
-  have "(dropWhile (\<lambda>x. x = Bk)(rev xs) = dropWhile (\<lambda>y. y = Bk) (rev ys))" using assms by auto
-  then have "(if (\<forall>x\<in>set xs.  x = Bk) then dropWhile(\<lambda>x. x = Bk) [] else dropWhile (\<lambda>x. x = Bk) (rev xs) @ []) = 
-            (if (\<forall>x\<in>set ys.  x = Bk) then dropWhile(\<lambda>x. x = Bk) [] else dropWhile (\<lambda>x. x = Bk) (rev ys) @ [])" 
-    by (smt (verit, best) dropWhile_eq_Nil_conv set_rev)
-  then have "(if (\<forall>x\<in>set xs.  x = Bk) then dropWhile(\<lambda>x. x = Bk) [x] else dropWhile (\<lambda>x. x = Bk) (rev xs) @ [x]) = 
-            (if (\<forall>x\<in>set ys.  x = Bk) then dropWhile(\<lambda>x. x = Bk) [x] else dropWhile (\<lambda>x. x = Bk) (rev ys) @ [x])"
-    by (smt (verit, best) \<open>dropWhile (\<lambda>x. x = Bk) (rev xs) = dropWhile (\<lambda>y. y = Bk) (rev ys)\<close> dropWhile_eq_Nil_conv set_rev)
-  then have "(dropWhile (\<lambda>x. x = Bk)((rev xs) @ [x]) = dropWhile (\<lambda>y. y = Bk) ((rev ys) @ [x]))" by (simp add: dropWhile_append)
-  then show ?thesis by simp
-qed
-
-
-lemma tape_to_nat_inverse: "tape_to_nat(nat_to_tape n) = n"
-proof(induct n rule: nat_to_tape.induct)
-  case 1
-  then show ?case by simp
-next
-  case (2 v)
-  then show ?case
-    proof (cases v rule: parity_cases)
-    case even
-    then have "tape_to_nat (nat_to_tape (Suc v)) = tape_to_nat (Oc # nat_to_tape (Suc v div 2))" by auto
-    also have "... = 2 * tape_to_nat(nat_to_tape (Suc v div 2)) + 1" by simp
-    also have "... = 2 * (Suc v div 2) + 1" using "2" by simp
-    then show ?thesis by (metis calculation even(1) even_Suc odd_two_times_div_two_succ)
-  next
-    case odd
-    then have "tape_to_nat (nat_to_tape (Suc v)) = tape_to_nat (Bk # nat_to_tape (Suc v div 2))" by simp
-    also have "... = 2 * tape_to_nat (nat_to_tape (Suc v div 2))" by simp
-    also have "... = 2 * Suc v div 2" by (metis "2" div_mult_swap even_Suc odd(1))
-    finally show ?thesis by auto
-        qed
-qed
-
-lemma nat_to_tape_inverse: "is_cell_list_eq (nat_to_tape(tape_to_nat xs)) xs"
-proof (induction xs rule: tape_to_nat.induct)
-  case 1
-  then show ?case by simp
-next
-  case (2 x xs)
-  then show ?case proof (cases x)
-    case Bk
-    then have "is_cell_list_eq (nat_to_tape(tape_to_nat xs)) xs" using 2 by simp
-    then have Bk_cons: "is_cell_list_eq (Bk # nat_to_tape(tape_to_nat xs)) (Bk#xs)" using is_cell_list_eq_cons by fast
-    consider "(\<forall>x\<in>set xs. x = Bk)" | "Oc \<in> set xs" using cell.exhaust by auto
-    then have "is_cell_list_eq (nat_to_tape(2 * tape_to_nat xs)) (Bk#xs)" proof (cases)
-      case 1
-       then show ?thesis using t2n_0 Bk_cons by simp
-    next
-      case 2
-      then show ?thesis using Bk_cons using t2n_0 by fastforce
-    qed (* case distinction on xs all blank vs some Oc *)
-    then show ?thesis by (simp add: Bk mult_2)
-  next
-    case Oc
-    then have "is_cell_list_eq (nat_to_tape(tape_to_nat xs)) xs" using 2 by simp
-    then have "is_cell_list_eq (Oc # nat_to_tape(tape_to_nat xs)) (Oc#xs)" using is_cell_list_eq_cons by fast
-    then have "is_cell_list_eq (nat_to_tape(2 * tape_to_nat xs + 1)) (Oc#xs)" by simp
-    then show ?thesis by (simp add: Oc mult_2)
-  qed
-qed
-
-
-lemma encode_decode_inverse: "(z,x,y) = encode_tape(decode_tape(z,x,y))"
-  sorry
-
-
-
 subsection "Encoding of Tape Instructions As arithmetic Operations"
-
+text "The encoding of the tape into a natural number as well as the encoding of the operations as functions on natural numbers is taken from https://www21.in.tum.de/teaching/theo/SS19/folien-handout.pdf ."
 abbreviation LeftShift:: "atomExp \<Rightarrow> aexp" ("_\<lless>") where
 "LeftShift a \<equiv> Plus a a"
 
@@ -153,15 +13,27 @@ fun encode_tape_instr :: "action  \<Rightarrow> com" where
                                   W1 \<Rightarrow> ''y''::= (V ''y''\<then>);;''y''::=(V ''y''\<lless>);;''y''::= ((V ''y'') \<oplus> (N 1)) |
                                   L \<Rightarrow> ''y''::= (V ''y''\<lless>);;''t''::=(V ''x''\<doteq>1);;''y''::= ((V ''y'') \<oplus> (V ''t''));; ''x''::= (V ''x''\<then>) |
                                   R \<Rightarrow> ''x''::= (V ''x''\<lless>);;''t''::=(V ''y''\<doteq>1);;''x''::= ((V ''x'') \<oplus> (V ''t''));;''y''::= (V ''y''\<then>))"
+lemma encode_tape_instr_cost:
+  assumes encode_instr: "((encode_tape_instr i),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
+  shows " 1 \<le> k \<and> k \<le> 8" 
+ using assms proof (cases i)
+  case W0
+  then show ?thesis using encode_instr by fastforce
+next
+  case W1
+  then show ?thesis using encode_instr by fastforce
+next
+  case L
+  then show ?thesis using encode_instr by fastforce
+next
+  case R
+  then show ?thesis using encode_instr by fastforce
+next
+  case Nop
+  then show ?thesis using encode_instr by fastforce
+qed
 
 lemma rightShift_state: 
-  assumes rightShift_com: "(v::= (V v\<then>), s) \<Rightarrow>\<^bsup> k \<^esup> s'"
-  shows " s(v := s v div 2) = s'" 
-  using assms proof -
-   show ?thesis using rightShift_com by auto
- qed
-
-lemma rightShift_state_: 
   assumes rightShift_com: "(v::= (V v\<then>), s) \<Rightarrow>\<^bsup> k \<^esup> s'"
   shows " (s v) div 2 = s' v" 
   using assms proof -
@@ -202,8 +74,8 @@ lemma update_encode_w0:
   assumes encode_w0: "((encode_tape_instr W0),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
   assumes update_w0: "(l,r) = update W0 (l0,r0)"
   and tape_state_eq: "s0 ''x'' = tape_to_nat l0 \<and> s0 ''y'' = tape_to_nat r0"
-shows "s ''x'' = tape_to_nat l \<and> s ''y'' = tape_to_nat r" 
-proof(intro conjI)
+shows "s ''x'' = tape_to_nat l" "s ''y'' = tape_to_nat r" 
+proof -
     from encode_w0 encode_w0_x tape_state_eq update_w0 show "s ''x'' = tape_to_nat l" by auto
   next
     from encode_w0 encode_w0_y have "s ''y'' = (if even (s0 ''y'') then s0 ''y'' else s0 ''y'' - 1)" by blast
@@ -261,8 +133,8 @@ lemma update_encode_w1:
   assumes encode_w1: "((encode_tape_instr W1),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
   assumes update_w1: "(l,r) = update W1 (l0,r0)"
   and tape_state_eq: "s0 ''x'' = tape_to_nat l0 \<and> s0 ''y'' = tape_to_nat r0"
-shows "s ''x'' = tape_to_nat l \<and> s ''y'' = tape_to_nat r" 
-proof(intro conjI)
+shows "s ''x'' = tape_to_nat l" "s ''y'' = tape_to_nat r" 
+proof -
     from encode_w1 encode_w0_x tape_state_eq update_w1 show "s ''x'' = tape_to_nat l" by auto
   next
     from encode_w1 encode_w1_y have "s ''y'' = (if even (s0 ''y'') then s0 ''y'' + 1 else s0 ''y'')" by blast
@@ -328,13 +200,13 @@ lemma update_encode_L:
   assumes encode_L: "((encode_tape_instr L),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
   assumes update_L: "(l,r) = update L (l0,r0)"
   and tape_state_eq: "s0 ''x'' = tape_to_nat l0 \<and> s0 ''y'' = tape_to_nat r0"
-shows "s ''x'' = tape_to_nat l \<and> s ''y'' = tape_to_nat r" 
-proof(intro conjI)
+shows "s ''x'' = tape_to_nat l" "s ''y'' = tape_to_nat r" 
+proof -
   from encode_L encode_L_x have "s ''x'' = s0 ''x'' div 2" by auto
   then have "s ''x'' = tape_to_nat l0 div 2" using tape_state_eq by simp
   moreover have "l = tl l0" using update_L
     by (metis Nil_tl Turing.update.simps(3) prod.inject)
-  moreover have "tape_to_nat (tl l0) = tape_to_nat l0 div 2" apply(induct l0) by auto
+  moreover have "tape_to_nat (tl l0) = tape_to_nat l0 div 2" by (induct l0) auto
   ultimately show "s ''x'' = tape_to_nat l" by simp 
   next
     from encode_L encode_L_y have "s ''y'' = s0 ''y'' * 2 + s0 ''x'' mod 2" by blast
@@ -408,13 +280,13 @@ lemma update_encode_R:
   assumes encode_R: "((encode_tape_instr R),s0) \<Rightarrow>\<^bsup> k \<^esup> s"
   assumes update_R: "(l,r) = update R (l0,r0)"
   and tape_state_eq: "s0 ''x'' = tape_to_nat l0 \<and> s0 ''y'' = tape_to_nat r0"
-shows "s ''x'' = tape_to_nat l \<and> s ''y'' = tape_to_nat r" 
-proof(intro conjI)
+shows "s ''x'' = tape_to_nat l " "s ''y'' = tape_to_nat r" 
+proof -
   from encode_R encode_R_y have "s ''y'' = s0 ''y'' div 2" by auto
   then have "s ''y'' = tape_to_nat r0 div 2" using tape_state_eq by simp
   moreover have "r = tl r0" using update_R
     by (metis Nil_tl Turing.update.simps(4) prod.inject)
-  moreover have "tape_to_nat (tl r0) = tape_to_nat r0 div 2" apply(induct r0) by auto
+  moreover have "tape_to_nat (tl r0) = tape_to_nat r0 div 2" by (induct r0) auto
   ultimately show "s ''y'' = tape_to_nat r" by simp 
   next
     from encode_R encode_R_x have "s ''x'' = s0 ''x'' * 2 + s0 ''y'' mod 2" by blast
@@ -452,44 +324,75 @@ abbreviation nth_name:: "nat \<Rightarrow> string" where
 "nth_name n \<equiv> (as_string ((next^^n) (default::name)))"
 
 
+text "After each iteration exactly one variable of the set corresponding to the states of the turing machine is 0.
+We step into that statement and read the current head and store it in t and then step into the corresponding statement and 
+encode the turing machine operation as an arithmetic one."
 fun turing_to_while_acc :: "tprog0 \<Rightarrow> name \<Rightarrow> com" where (* state has to evaluate all variables to 1 except (next (default::name)) which has to be 0 at the beginning *)
 "turing_to_while_acc [] _ = SKIP" |
 "turing_to_while_acc ((a0,s0)#(a1,s1)#is) n = turing_to_while_acc is (next n);;
   IF (as_string n)\<noteq>0 THEN SKIP
-                     ELSE (''t''::=(V ''x''\<doteq>1);;IF ''t''\<noteq>0 THEN 
+                     ELSE (''t''::=(V ''x''\<doteq>1);;IF ''t''\<noteq>0 THEN   
                             encode_tape_instr a1;;(nth_name s1)::=A (N 0);;(as_string n)::=A (N 1);;''z''::=(A(N s1))
-                          ELSE encode_tape_instr a0;;(nth_name s0)::=A (N 0);;(as_string n)::=A (N 1));;''z''::=(A(N s0)) "
-
+                          ELSE encode_tape_instr a0;;(nth_name s0)::=A (N 0);;(as_string n)::=A (N 1));;''z''::=(A(N s0))"
+text "We iterate through the while loop until we enter the halting state/accepting state which corresponds to default:name (_)."
 fun turing_to_while :: "config \<Rightarrow> tprog0 \<Rightarrow> com" where
 "turing_to_while c p = (let (z,x,y) = encode_tape c in (''z''::=A (N z);;''x''::=A (N x);;''y''::=A (N y)));;
                                           WHILE (as_string (default::name))\<noteq>0 DO turing_to_while_acc p (next default)"
 
-lemma update_state_nop[simp]: 
-  assumes tm_conversion: "(turing_to_while (q,l,r) p,\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s"
-    and tm_nop_conversion: "(turing_to_while (q,update Nop (l,r)) p,\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s'"
-  shows "s = s'"
-proof -
-  from tm_conversion have "(turing_to_while (q,l,r) p,\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s" by simp
-  then have "(turing_to_while (q,update Nop (l,r)) p,\<lambda>s. if s = nth_name q then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s" by simp
-  thus ?thesis using bigstep_det tm_nop_conversion by auto
+lemma conversion_correct_current_state:
+  assumes "(turing_to_while_acc p n, \<lambda>s. if s=''x'' then tape_to_nat l else if s=''y'' then tape_to_nat r else if s = nth_name state then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s" 
+  and "encode_tape (step0 (state,l,r) p) = (s1,l1,r1)"
+  and is_in_program: "nth_name state \<in> set (Max_Constant.all_variables (turing_to_while_acc p n))"
+  and tm_wf: "tm_wf0 p"
+shows "(s1,l1,r1) = (s ''z'', s ''x'', s ''y'')"
+  using assms proof(induction p n rule: turing_to_while_acc.induct)
+    case (1 uu)
+    then show ?case by simp
+  next
+    case (2 a0 s0 a1 s1 "is" n)          
+    from is_in_program have "nth_name state \<in> set (all_variables (turing_to_while_acc ((a0, s0) # (a1, s1) # is) n))"
+      using "2.prems"(3) by blast
+    then consider "nth_name state \<in> set (all_variables (turing_to_while_acc is (next n)))" | 
+    "nth_name state \<in> set (all_variables (turing_to_while_acc ((a0, s0) # [(a1, s1)]) n))" by auto
+      then show ?case sorry
+  next
+    case (3 v b)
+    then show ?case by simp
+  qed
+
+lemma state_contained:
+  assumes tm_wf: "tm_wf0 p"
+  and "nth_name e = as_string n" "e > 1"
+  and is_valid_state: "2 * s \<le> length p" "s > 0"(* s > 0 cause 0 is special halting case, treated in the while loop and 2 * s \<le> length p cause there are at most p div 2 states *)
+shows "nth_name s \<in> set (Max_Constant.all_variables (turing_to_while_acc p n))"
+  using assms proof(induction p n rule: turing_to_while_acc.induct)
+  case (1 uu)
+  then show ?case by simp
+next
+  case (2 a0 s0 a1 s1 "is" n)
+  then show ?case sorry
+next
+  case (3 v b)
+  then show ?case by simp
 qed
 
-lemma conversion_step_correct: 
-  assumes tm_wf: "tm_wf (p,1)"
-  and "(turing_to_while_acc p n, \<lambda>s. if s=''x'' then tape_to_nat l else if s=''y'' then tape_to_nat r else if s = nth_name state then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s " 
+
+lemma conversion_step_correct:
+  assumes tm_wf: "tm_wf0 p"
+  and "(turing_to_while_acc p n, \<lambda>s. if s=''x'' then tape_to_nat l else if s=''y'' then tape_to_nat r else if s = nth_name state then 0 else 1) \<Rightarrow>\<^bsup> k \<^esup> s" 
   and "encode_tape (step0 (state,l,r) p) = (s1,l1,r1)"
   shows "(s1,l1,r1) = (s ''z'', s ''x'', s ''y'')"
   using assms proof(induction p n rule: turing_to_while_acc.induct)
     case (1 uu)
-    then show ?case sorry
+    then show ?case by simp
   next
-    case (2 a0 s0 a1 s1 "is" n)
+    case (2 a0 s0 a1 s1 "is" n)          
     then show ?case sorry
   next
     case (3 v b)
-    then show ?case sorry
+    then show ?case by simp
   qed
-  qed
+
 lemma conversion_correct:
   assumes tm_wf: "tm_wf (p,0)"
   and tm_accepts: "is_final(steps0 c p n)"
